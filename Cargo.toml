@@ -16,6 +16,7 @@ authors = ["Marius S <39998+winding-lines@users.noreply.github.com>"]
 "azure" = ["async", "object_store/azure"]
 "gcp" = ["async", "object_store/gcp"]
 "http" = ["async", "object_store/http"]
+"serde-lazy" = []
 
 
 [dependencies]
