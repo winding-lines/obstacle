@@ -1,12 +1,21 @@
 [package]
 name = "obstinate"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Experimental memory mapped like interface on top of object_store."
 license = "Apache-2.0"
 readme = "README.md"
 
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+# Cloud support.
+"async" = []
+"aws" = ["async", "object_store/aws"]
+"azure" = ["async", "object_store/azure"]
+"gcp" = ["async", "object_store/gcp"]
+"http" = ["async", "object_store/http"]
+
 
 [dependencies]
+memmap2 = "0.7.1"
+object_store = {version="0.6.1", path="../arrow-rs/object_store"}

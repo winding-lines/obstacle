@@ -1,1 +1,1 @@
-WIP mmap API on top of object_store.
+WIP [memmap2](https://github.com/RazrFalcon/memmap2-rs) API on top of [object_store](https://github.com/apache/arrow-rs/tree/master/object_store).
