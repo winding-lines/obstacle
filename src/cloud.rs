@@ -1,3 +1,4 @@
+use crate::err::{obstinate_err, ObstinateError};
 use std::str::FromStr;
 
 #[cfg(feature = "aws")]
@@ -18,8 +19,6 @@ use object_store::ObjectStore;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "async")]
 use url::Url;
-
-use crate::error::{PolarsError, PolarsResult};
 
 /// The type of the config keys must satisfy the following requirements:
 /// 1. must be easily collected into a HashMap, the type required by the object_crate API.
@@ -46,7 +45,7 @@ pub struct CloudOptions {
 /// Parse an untype configuration hashmap to a typed configuration for the given configuration key type.
 fn parsed_untyped_config<T, I: IntoIterator<Item = (impl AsRef<str>, impl Into<String>)>>(
     config: I,
-) -> PolarsResult<Configs<T>>
+) -> Result<Configs<T>, ObstinateError>
 where
     T: FromStr + Eq + std::hash::Hash,
 {
@@ -54,12 +53,12 @@ where
         .into_iter()
         .map(|(key, val)| {
             T::from_str(key.as_ref())
-                .map_err(
-                    |_| polars_err!(ComputeError: "unknown configuration key: {}", key.as_ref()),
-                )
+                .map_err(|_| {
+                    ObstinateError::new(format!("unknown configuration key: {}", key.as_ref()))
+                })
                 .map(|typed_key| (typed_key, val.into()))
         })
-        .collect::<PolarsResult<Configs<T>>>()
+        .collect::<Result<Configs<T>, ObstinateError>>()
 }
 
 pub enum CloudType {
@@ -70,27 +69,23 @@ pub enum CloudType {
 }
 
 impl FromStr for CloudType {
-    type Err = PolarsError;
+    type Err = ObstinateError;
 
     #[cfg(feature = "async")]
     fn from_str(url: &str) -> Result<Self, Self::Err> {
-        let parsed = Url::parse(url).map_err(polars_error::to_compute_err)?;
+        let parsed = Url::parse(url).map_err(ObstinateError::from_err)?;
         Ok(match parsed.scheme() {
             "s3" => Self::Aws,
             "az" | "adl" | "abfs" => Self::Azure,
             "gs" | "gcp" => Self::Gcp,
             "file" => Self::File,
-            _ => polars_bail!(ComputeError: "unknown url scheme"),
+            _ => obstinate_err("unknown url scheme"),
         })
     }
 
     #[cfg(not(feature = "async"))]
     fn from_str(_s: &str) -> Result<Self, Self::Err> {
-        return Err(Error::new(
-            ErrorKind::InvalidData,
-            "memory map offset is larger than length",
-        ));        
-        polars_bail!(ComputeError: "at least one of the cloud features must be enabled");
+        obstinate_err("at least one of the cloud features must be enabled")
     }
 }
 
@@ -112,11 +107,11 @@ impl CloudOptions {
 
     /// Build the ObjectStore implementation for AWS.
     #[cfg(feature = "aws")]
-    pub fn build_aws(&self, bucket_name: &str) -> PolarsResult<impl ObjectStore> {
+    pub fn build_aws(&self, bucket_name: &str) -> Result<impl ObjectStore, ObstinateError> {
         let options = self
             .aws
             .as_ref()
-            .ok_or_else(|| polars_err!(ComputeError: "`aws` configuration missing"))?;
+            .ok_or_else(|| obstinate_err("`aws` configuration missing"))?;
 
         let mut builder = AmazonS3Builder::new();
         for (key, value) in options.iter() {
@@ -125,7 +120,7 @@ impl CloudOptions {
         builder
             .with_bucket_name(bucket_name)
             .build()
-            .map_err(polars_error::to_compute_err)
+            .map_err(ObstinateError::from_err)
     }
 
     /// Set the configuration for Azure connections. This is the preferred API from rust.
@@ -145,11 +140,11 @@ impl CloudOptions {
 
     /// Build the ObjectStore implementation for Azure.
     #[cfg(feature = "azure")]
-    pub fn build_azure(&self, container_name: &str) -> PolarsResult<impl ObjectStore> {
+    pub fn build_azure(&self, container_name: &str) -> Result<impl ObjectStore> {
         let options = self
             .azure
             .as_ref()
-            .ok_or_else(|| polars_err!(ComputeError: "`azure` configuration missing"))?;
+            .ok_or_else(|| polars_err!("`azure` configuration missing"))?;
 
         let mut builder = MicrosoftAzureBuilder::new();
         for (key, value) in options.iter() {
@@ -178,11 +173,11 @@ impl CloudOptions {
 
     /// Build the ObjectStore implementation for GCP.
     #[cfg(feature = "gcp")]
-    pub fn build_gcp(&self, bucket_name: &str) -> PolarsResult<impl ObjectStore> {
+    pub fn build_gcp(&self, bucket_name: &str) -> Result<impl ObjectStore> {
         let options = self
             .gcp
             .as_ref()
-            .ok_or_else(|| polars_err!(ComputeError: "`gcp` configuration missing"))?;
+            .ok_or_else(|| polars_err!("`gcp` configuration missing"))?;
 
         let mut builder = GoogleCloudStorageBuilder::new();
         for (key, value) in options.iter() {
@@ -199,7 +194,7 @@ impl CloudOptions {
     pub fn from_untyped_config<I: IntoIterator<Item = (impl AsRef<str>, impl Into<String>)>>(
         url: &str,
         config: I,
-    ) -> PolarsResult<Self> {
+    ) -> Result<Self, ObstinateError> {
         match CloudType::from_str(url)? {
             CloudType::Aws => {
                 #[cfg(feature = "aws")]
@@ -209,7 +204,7 @@ impl CloudOptions {
                 }
                 #[cfg(not(feature = "aws"))]
                 {
-                    polars_bail!(ComputeError: "'aws' feature is not enabled");
+                    return obstinate_err("'aws' feature is not enabled");
                 }
             }
             CloudType::Azure => {
@@ -220,7 +215,7 @@ impl CloudOptions {
                 }
                 #[cfg(not(feature = "azure"))]
                 {
-                    polars_bail!(ComputeError: "'azure' feature is not enabled");
+                    return obstinate_err("'azure' feature is not enabled");
                 }
             }
             CloudType::File => Ok(Self::default()),
@@ -232,7 +227,7 @@ impl CloudOptions {
                 }
                 #[cfg(not(feature = "gcp"))]
                 {
-                    polars_bail!(ComputeError: "'gcp' feature is not enabled");
+                    return obstinate_err("'gcp' feature is not enabled");
                 }
             }
         }

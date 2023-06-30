@@ -1,0 +1,37 @@
+use memmap2::{self, MmapAsRawDesc, MmapOptions};
+use std::fmt::Debug;
+use std::fs::File;
+use std::io::Result;
+use std::ops::Deref;
+
+/// Wrapped for the memmap2::Mmap.
+pub struct Mmap(memmap2::Mmap);
+
+impl Mmap {
+    /// Create a memory map from an object with the MmapAsRawDesc trait.
+    pub unsafe fn map<T: MmapAsRawDesc + Debug>(file: T) -> Result<Mmap> {
+        Ok(Mmap(MmapOptions::new().map(file)?))
+    }
+
+    /// Create a memory map from a file or url path.
+    pub fn from_url(url: &str) -> Result<Mmap> {
+        let file = File::open(url)?;
+        unsafe { Mmap::map(&file) }
+    }
+}
+
+impl Deref for Mmap {
+    type Target = [u8];
+
+    #[inline]
+    fn deref(&self) -> &[u8] {
+        self.0.deref()
+    }
+}
+
+impl AsRef<[u8]> for Mmap {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        self.0.deref()
+    }
+}

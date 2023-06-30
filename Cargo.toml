@@ -22,3 +22,4 @@ authors = ["Marius S <39998+winding-lines@users.noreply.github.com>"]
 [dependencies]
 memmap2 = "0.7.1"
 object_store = {version="0.6.1"}
+url = "2.4.0"
