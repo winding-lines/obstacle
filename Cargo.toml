@@ -18,8 +18,14 @@ authors = ["Marius S <39998+winding-lines@users.noreply.github.com>"]
 "http" = ["async", "object_store/http"]
 "serde-lazy" = []
 
+[dev-dependencies]
+aws-creds = "0.35.0"
 
 [dependencies]
+futures-util = "0.3.28"
 memmap2 = "0.7.1"
-object_store = {version="0.6.1"}
+object_store = {version="0.6.1", path="../../arrow-rs/object_store"}
+tempfile = "3.6.0"
+tokio = { version="1.29.1", features = ["net", "rt-multi-thread"]}
+
 url = "2.4.0"

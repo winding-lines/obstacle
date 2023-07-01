@@ -61,6 +61,7 @@ where
         .collect::<Result<Configs<T>, ObstinateError>>()
 }
 
+#[derive(Debug)]
 pub enum CloudType {
     Aws,
     Azure,
@@ -79,7 +80,7 @@ impl FromStr for CloudType {
             "az" | "adl" | "abfs" => Self::Azure,
             "gs" | "gcp" => Self::Gcp,
             "file" => Self::File,
-            _ => obstinate_err("unknown url scheme"),
+            _ => return obstinate_err("unknown url scheme"),
         })
     }
 
@@ -111,7 +112,7 @@ impl CloudOptions {
         let options = self
             .aws
             .as_ref()
-            .ok_or_else(|| obstinate_err("`aws` configuration missing"))?;
+            .ok_or_else(|| ObstinateError::new("`aws` configuration missing"))?;
 
         let mut builder = AmazonS3Builder::new();
         for (key, value) in options.iter() {
@@ -232,4 +233,18 @@ impl CloudOptions {
             }
         }
     }
+}
+
+use std::sync::OnceLock;
+
+static mut CLOUD_OPTIONS: OnceLock<CloudOptions> = OnceLock::new();
+
+pub fn set_cloud_options(options: CloudOptions) {
+    unsafe {
+        CLOUD_OPTIONS.get_or_init(|| options);
+    }
+}
+
+pub fn get_cloud_options() -> Option<&'static CloudOptions> {
+    unsafe { CLOUD_OPTIONS.get() }
 }
