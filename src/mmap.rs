@@ -1,13 +1,10 @@
+#[cfg(feature = "async")]
+use crate::cache::download_file;
 use crate::cloud::CloudType;
-use crate::get_cloud_options;
-use futures_util::StreamExt;
 use memmap2::{self, MmapAsRawDesc, MmapOptions};
-use object_store::path::Path;
-use object_store::ObjectStore;
 use std::fmt::Debug;
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::io::Result;
-use std::io::Write;
 use std::ops::Deref;
 use std::str::FromStr;
 use tokio;
@@ -25,20 +22,16 @@ impl Mmap {
     #[tokio::main]
     pub async fn from_url(url: &str) -> Result<Mmap> {
         match CloudType::from_str(url) {
-            Ok(cloud_type) => {
-                let cloud_options = get_cloud_options().unwrap();
-                let object_store = cloud_options.build_aws("one").unwrap();
-                let os_path = Path::from("foods2.csv");
-                let mut stream = object_store.get(&os_path).await.unwrap().into_stream();
-                let local_path = "local_foods2.csv";
-                let mut local_file = File::create(local_path).unwrap();
-                while let Some(buffer) = stream.next().await {
-                    let bytes = buffer.unwrap();
-                    local_file.write_all(&bytes).unwrap();
+            Ok(_cloud_type) => {
+                #[cfg(feature = "async")]
+                {
+                    let file = download_file(url).await.unwrap();
+                    unsafe { Mmap::map(&file) }
                 }
-                local_file.flush().unwrap();
-                let file = File::open(local_path).unwrap();
-                unsafe { Mmap::map(&file) }
+                #[cfg(not(feature = "async"))]
+                {
+                    panic!("at least one of the cloud features must be enabled")
+                }
             }
             Err(_) => {
                 let file = File::open(url)?;

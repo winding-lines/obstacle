@@ -1,3 +1,5 @@
+#[cfg(feature = "async")]
+mod cache;
 mod cloud;
 mod err;
 mod mmap;

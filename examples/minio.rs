@@ -1,13 +1,15 @@
 //! This example assumes that you have installed minio locally.
 //! Run with:
 //!     cargo run --example   minio --features aws
-use awscreds::Credentials;
-use object_store::ClientConfigKey;
-use obstinate::AmazonS3ConfigKey as Key;
-use obstinate::{self, set_cloud_options};
-use std::str::from_utf8;
 
-pub fn main() {
+#[cfg(feature = "aws")]
+fn mmap_from_url() {
+    use awscreds::Credentials;
+    use object_store::ClientConfigKey;
+    use obstinate::set_cloud_options;
+    use obstinate::AmazonS3ConfigKey as Key;
+    use std::str::from_utf8;
+
     let cred = Credentials::default().unwrap();
 
     // Propagate the credentials and other cloud options.
@@ -21,4 +23,15 @@ pub fn main() {
     set_cloud_options(cloud_options);
     let mmaped = obstinate::Mmap::from_url(&"s3://one/foods2.csv").unwrap();
     print!("content: {}.", from_utf8(&mmaped[..]).unwrap());
+}
+
+pub fn main() {
+    #[cfg(feature = "aws")]
+    {
+        mmap_from_url();
+    }
+    #[cfg(not(feature = "aws"))]
+    {
+        println!("Please enable the aws feature to run this example.");
+    }
 }
