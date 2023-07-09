@@ -1,4 +1,4 @@
-use crate::err::ObstinateError;
+use crate::err::ObstacleError;
 use crate::glob::CloudLocation;
 use crate::{build, get_cloud_options};
 use futures_util::StreamExt;
@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use url::Url;
 
 /// Build a local file for caching a given url.
-fn _local_path_for_url(location: &CloudLocation) -> Result<PathBuf, ObstinateError> {
+fn _local_path_for_url(location: &CloudLocation) -> Result<PathBuf, ObstacleError> {
     let mut base = home_dir().unwrap();
     base.push(".cache/obstinate");
     create_dir_all(&base)?;
@@ -22,8 +22,8 @@ fn _local_path_for_url(location: &CloudLocation) -> Result<PathBuf, ObstinateErr
     Ok(base)
 }
 
-pub async fn download_file(url: &str) -> Result<File, ObstinateError> {
-    let parsed = Url::parse(url).map_err(ObstinateError::from_err)?;
+pub async fn download_file(url: &str) -> Result<File, ObstacleError> {
+    let parsed = Url::parse(url).map_err(ObstacleError::from_err)?;
     let cloud_options = get_cloud_options();
 
     let (cloud_location, object_store) = build(url, cloud_options)?;

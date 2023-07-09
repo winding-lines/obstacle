@@ -4,7 +4,7 @@ use object_store::path::Path;
 use regex::Regex;
 use url::Url;
 
-use crate::err::{obstinate_err, ObstinateError};
+use crate::err::{obstinate_err, ObstacleError};
 use crate::CloudOptions;
 
 const DELIMITER: char = '/';
@@ -12,7 +12,7 @@ const DELIMITER: char = '/';
 /// Split the url in
 /// 1. the prefix part (all path components until the first one with '*')
 /// 2. a regular expression representation of the rest.
-fn extract_prefix_expansion(url: &str) -> Result<(String, Option<String>), ObstinateError> {
+fn extract_prefix_expansion(url: &str) -> Result<(String, Option<String>), ObstacleError> {
     let splits = url.split(DELIMITER);
     let mut prefix = String::new();
     let mut expansion = String::new();
@@ -87,7 +87,7 @@ pub struct CloudLocation {
 
 impl CloudLocation {
     /// Parse a CloudLocation from an url.
-    pub fn new(url: &str) -> Result<CloudLocation, ObstinateError> {
+    pub fn new(url: &str) -> Result<CloudLocation, ObstacleError> {
         let parsed = Url::parse(url)?;
         let is_local = parsed.scheme() == "file";
         let (bucket, key) = if is_local {
@@ -97,7 +97,7 @@ impl CloudLocation {
             let bucket = parsed
                 .host()
                 .ok_or_else(|| {
-                    ObstinateError::new(format!("cannot parse bucket (host) from url: {}", url))
+                    ObstacleError::new(format!("cannot parse bucket (host) from url: {}", url))
                 })?
                 .to_string();
             (bucket, key)
@@ -129,7 +129,7 @@ struct Matcher {
 
 impl Matcher {
     /// Build a Matcher for the given prefix and expansion.
-    fn new(prefix: String, expansion: Option<&str>) -> Result<Matcher, ObstinateError> {
+    fn new(prefix: String, expansion: Option<&str>) -> Result<Matcher, ObstacleError> {
         // Cloud APIs accept a prefix without any expansion, extract it.
         let re = expansion.map(Regex::new).transpose()?;
         Ok(Matcher { prefix, re })
@@ -154,7 +154,7 @@ impl Matcher {
 pub async fn glob(
     url: &str,
     cloud_options: Option<&CloudOptions>,
-) -> Result<Vec<String>, ObstinateError> {
+) -> Result<Vec<String>, ObstacleError> {
     // Find the fixed prefix, up to the first '*'.
 
     let (
@@ -171,7 +171,7 @@ pub async fn glob(
     let list_stream = store.list(Some(&Path::from(prefix))).await?;
     let locations: Vec<Path> = list_stream
         .then(|entry| async {
-            Ok::<_, ObstinateError>(entry.map_err(ObstinateError::from_err)?.location)
+            Ok::<_, ObstacleError>(entry.map_err(ObstacleError::from_err)?.location)
         })
         .filter(|name| ready(name.as_ref().map_or(true, |name| matcher.is_matching(name))))
         .try_collect()

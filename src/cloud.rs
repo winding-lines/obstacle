@@ -1,5 +1,5 @@
 use crate::{
-    err::{obstinate_err, ObstinateError},
+    err::{obstinate_err, ObstacleError},
     glob::CloudLocation,
 };
 use std::str::FromStr;
@@ -17,7 +17,6 @@ use object_store::gcp::GoogleCloudStorageBuilder;
 #[cfg(feature = "gcp")]
 pub use object_store::gcp::GoogleConfigKey;
 use object_store::local::LocalFileSystem;
-#[cfg(feature = "async")]
 use object_store::ObjectStore;
 #[cfg(feature = "serde-lazy")]
 use serde::{Deserialize, Serialize};
@@ -49,7 +48,7 @@ pub struct CloudOptions {
 /// Parse an untype configuration hashmap to a typed configuration for the given configuration key type.
 fn parsed_untyped_config<T, I: IntoIterator<Item = (impl AsRef<str>, impl Into<String>)>>(
     config: I,
-) -> Result<Configs<T>, ObstinateError>
+) -> Result<Configs<T>, ObstacleError>
 where
     T: FromStr + Eq + std::hash::Hash,
 {
@@ -58,11 +57,11 @@ where
         .map(|(key, val)| {
             T::from_str(key.as_ref())
                 .map_err(|_| {
-                    ObstinateError::new(format!("unknown configuration key: {}", key.as_ref()))
+                    ObstacleError::new(format!("unknown configuration key: {}", key.as_ref()))
                 })
                 .map(|typed_key| (typed_key, val.into()))
         })
-        .collect::<Result<Configs<T>, ObstinateError>>()
+        .collect::<Result<Configs<T>, ObstacleError>>()
 }
 
 #[derive(Debug)]
@@ -74,11 +73,11 @@ pub enum CloudType {
 }
 
 impl FromStr for CloudType {
-    type Err = ObstinateError;
+    type Err = ObstacleError;
 
     #[cfg(feature = "async")]
     fn from_str(url: &str) -> Result<Self, Self::Err> {
-        let parsed = Url::parse(url).map_err(ObstinateError::from_err)?;
+        let parsed = Url::parse(url).map_err(ObstacleError::from_err)?;
         Ok(match parsed.scheme() {
             "s3" => Self::Aws,
             "az" | "adl" | "abfs" => Self::Azure,
@@ -112,11 +111,11 @@ impl CloudOptions {
 
     /// Build the ObjectStore implementation for AWS.
     #[cfg(feature = "aws")]
-    pub fn build_aws(&self, bucket_name: &str) -> Result<impl ObjectStore, ObstinateError> {
+    pub fn build_aws(&self, bucket_name: &str) -> Result<impl ObjectStore, ObstacleError> {
         let options = self
             .aws
             .as_ref()
-            .ok_or_else(|| ObstinateError::new("`aws` configuration missing"))?;
+            .ok_or_else(|| ObstacleError::new("`aws` configuration missing"))?;
 
         let mut builder = AmazonS3Builder::new();
         for (key, value) in options.iter() {
@@ -125,7 +124,7 @@ impl CloudOptions {
         builder
             .with_bucket_name(bucket_name)
             .build()
-            .map_err(ObstinateError::from_err)
+            .map_err(ObstacleError::from_err)
     }
 
     /// Set the configuration for Azure connections. This is the preferred API from rust.
@@ -145,7 +144,7 @@ impl CloudOptions {
 
     /// Build the ObjectStore implementation for Azure.
     #[cfg(feature = "azure")]
-    pub fn build_azure(&self, container_name: &str) -> Result<impl ObjectStore> {
+    pub fn build_azure(&self, container_name: &str) -> Result<impl ObjectStore, ObstacleError> {
         let options = self
             .azure
             .as_ref()
@@ -158,7 +157,7 @@ impl CloudOptions {
         builder
             .with_container_name(container_name)
             .build()
-            .map_err(ObstinateError::from_err)
+            .map_err(ObstacleError::from_err)
     }
 
     /// Set the configuration for GCP connections. This is the preferred API from rust.
@@ -178,7 +177,7 @@ impl CloudOptions {
 
     /// Build the ObjectStore implementation for GCP.
     #[cfg(feature = "gcp")]
-    pub fn build_gcp(&self, bucket_name: &str) -> Result<impl ObjectStore> {
+    pub fn build_gcp(&self, bucket_name: &str) -> Result<impl ObjectStore, ObstacleError> {
         let options = self
             .gcp
             .as_ref()
@@ -191,7 +190,7 @@ impl CloudOptions {
         builder
             .with_bucket_name(bucket_name)
             .build()
-            .map_err(polars_error::to_compute_err)
+            .map_err(ObstacleError::from_err)
     }
 
     /// Parse a configuration from a Hashmap. This is the interface from Python.
@@ -199,7 +198,7 @@ impl CloudOptions {
     pub fn from_untyped_config<I: IntoIterator<Item = (impl AsRef<str>, impl Into<String>)>>(
         url: &str,
         config: I,
-    ) -> Result<Self, ObstinateError> {
+    ) -> Result<Self, ObstacleError> {
         match CloudType::from_str(url)? {
             CloudType::Aws => {
                 #[cfg(feature = "aws")]
@@ -240,41 +239,40 @@ impl CloudOptions {
 }
 
 #[allow(dead_code)]
-fn err_missing_feature<T>(feature: &str, scheme: &str) -> Result<T, ObstinateError> {
-    Err(ObstinateError::new(format!(
+fn err_missing_feature<T>(feature: &str, scheme: &str) -> Result<T, ObstacleError> {
+    Err(ObstacleError::new(format!(
         "feature '{}' must be enabled in order to use '{}' cloud urls",
         feature, scheme
     ))
     .into())
 }
 #[cfg(feature = "async")]
-fn err_missing_configuration<T>(feature: &str, scheme: &str) -> Result<T, ObstinateError> {
-    Err(ObstinateError::new(format!(
+fn err_missing_configuration(feature: &str, scheme: &str) -> ObstacleError {
+    ObstacleError::new(format!(
         "configuration '{}' must be provided in order to use '{}' cloud urls",
         feature, scheme,
     ))
-    .into())
 }
 
 /// Build an ObjectStore based on the URL and passed in url. Return the cloud location and an implementation of the object store.
 pub fn build(
     url: &str,
     _options: Option<&CloudOptions>,
-) -> Result<(CloudLocation, Box<dyn ObjectStore>), ObstinateError> {
+) -> Result<(CloudLocation, Box<dyn ObjectStore>), ObstacleError> {
     let cloud_location = CloudLocation::new(url)?;
     let store = match CloudType::from_str(url)? {
         CloudType::File => {
             let local = LocalFileSystem::new();
-            Ok::<_, ObstinateError>(Box::new(local) as Box<dyn ObjectStore>)
+            Ok::<_, ObstacleError>(Box::new(local) as Box<dyn ObjectStore>)
         }
         CloudType::Aws => {
             #[cfg(feature = "aws")]
             match _options {
                 Some(options) => {
                     let store = options.build_aws(&cloud_location.bucket)?;
-                    Ok::<_, ObstinateError>(Box::new(store) as Box<dyn ObjectStore>)
+                    Ok::<_, ObstacleError>(Box::new(store) as Box<dyn ObjectStore>)
                 }
-                _ => return err_missing_configuration("aws", &cloud_location.scheme),
+                _ => return Err(err_missing_configuration("aws", &cloud_location.scheme)),
             }
             #[cfg(not(feature = "aws"))]
             return err_missing_feature("aws", &cloud_location.scheme);
@@ -284,9 +282,9 @@ pub fn build(
             match _options {
                 Some(options) => {
                     let store = options.build_gcp(&cloud_location.bucket)?;
-                    Ok::<_, ObstinateError>(Box::new(store) as Box<dyn ObjectStore>)
+                    Ok::<_, ObstacleError>(Box::new(store) as Box<dyn ObjectStore>)
                 }
-                _ => return err_missing_configuration("gcp", &cloud_location.scheme),
+                _ => return Err(err_missing_configuration("gcp", &cloud_location.scheme)),
             }
             #[cfg(not(feature = "gcp"))]
             return err_missing_feature("gcp", &cloud_location.scheme);
@@ -297,9 +295,9 @@ pub fn build(
                 match _options {
                     Some(options) => {
                         let store = options.build_azure(&cloud_location.bucket)?;
-                        Ok::<_, ObstinateError>(Box::new(store) as Box<dyn ObjectStore>)
+                        Ok::<_, ObstacleError>(Box::new(store) as Box<dyn ObjectStore>)
                     }
-                    _ => return err_missing_configuration("azure", &cloud_location.scheme),
+                    _ => return Err(err_missing_configuration("azure", &cloud_location.scheme)),
                 }
             }
             #[cfg(not(feature = "azure"))]

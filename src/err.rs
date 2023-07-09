@@ -1,48 +1,48 @@
 use std::error::Error;
 
 #[derive(Debug)]
-pub struct ObstinateError {
+pub struct ObstacleError {
     pub message: String,
 }
 
-impl ObstinateError {
+impl ObstacleError {
     pub fn new<S: Into<String>>(msg: S) -> Self {
-        ObstinateError {
+        ObstacleError {
             message: msg.into(),
         }
     }
 
     pub fn from_err<S: Error>(err: S) -> Self {
-        ObstinateError {
+        ObstacleError {
             message: err.to_string(),
         }
     }
 }
 
-pub fn obstinate_err<T, S: AsRef<str>>(msg: S) -> Result<T, ObstinateError> {
-    Err(ObstinateError::new(msg.as_ref()))
+pub fn obstinate_err<T, S: AsRef<str>>(msg: S) -> Result<T, ObstacleError> {
+    Err(ObstacleError::new(msg.as_ref()))
 }
 
-impl From<std::io::Error> for ObstinateError {
+impl From<std::io::Error> for ObstacleError {
     fn from(err: std::io::Error) -> Self {
-        ObstinateError::from_err(err)
+        ObstacleError::from_err(err)
     }
 }
 
-impl From<regex::Error> for ObstinateError {
+impl From<regex::Error> for ObstacleError {
     fn from(err: regex::Error) -> Self {
-        ObstinateError::from_err(err)
+        ObstacleError::from_err(err)
     }
 }
 
-impl From<object_store::Error> for ObstinateError {
+impl From<object_store::Error> for ObstacleError {
     fn from(err: object_store::Error) -> Self {
-        ObstinateError::from_err(err)
+        ObstacleError::from_err(err)
     }
 }
 
-impl From<url::ParseError> for ObstinateError {
+impl From<url::ParseError> for ObstacleError {
     fn from(err: url::ParseError) -> Self {
-        ObstinateError::from_err(err)
+        ObstacleError::from_err(err)
     }
 }
