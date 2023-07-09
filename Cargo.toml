@@ -1,11 +1,11 @@
 [package]
-name = "obstinate"
-version = "0.1.2"
+name = "obstacle"
+version = "0.0.1"
 edition = "2021"
-description = "Experimental memory mapped like interface on top of object_store."
+description = "Integrate the object_store crate with mmap based consumers like Polars."
 license = "Apache-2.0"
 readme = "README.md"
-repository = "https://github.com/winding-lines/obstinate"
+repository = "https://github.com/winding-lines/obstacle"
 authors = ["Marius S <39998+winding-lines@users.noreply.github.com>"]
 
 
