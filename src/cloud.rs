@@ -1,4 +1,7 @@
-use crate::err::{obstinate_err, ObstinateError};
+use crate::{
+    err::{obstinate_err, ObstinateError},
+    glob::CloudLocation,
+};
 use std::str::FromStr;
 
 #[cfg(feature = "aws")]
@@ -13,6 +16,7 @@ use object_store::azure::MicrosoftAzureBuilder;
 use object_store::gcp::GoogleCloudStorageBuilder;
 #[cfg(feature = "gcp")]
 pub use object_store::gcp::GoogleConfigKey;
+use object_store::local::LocalFileSystem;
 #[cfg(feature = "async")]
 use object_store::ObjectStore;
 #[cfg(feature = "serde-lazy")]
@@ -80,7 +84,7 @@ impl FromStr for CloudType {
             "az" | "adl" | "abfs" => Self::Azure,
             "gs" | "gcp" => Self::Gcp,
             "file" => Self::File,
-            _ => return obstinate_err("unknown url scheme"),
+            _ => return obstinate_err(format!("unknown url scheme {}", parsed.scheme())),
         })
     }
 
@@ -145,7 +149,7 @@ impl CloudOptions {
         let options = self
             .azure
             .as_ref()
-            .ok_or_else(|| polars_err!("`azure` configuration missing"))?;
+            .ok_or_else(|| err_missing_configuration("azure", ""))?;
 
         let mut builder = MicrosoftAzureBuilder::new();
         for (key, value) in options.iter() {
@@ -154,7 +158,7 @@ impl CloudOptions {
         builder
             .with_container_name(container_name)
             .build()
-            .map_err(polars_error::to_compute_err)
+            .map_err(ObstinateError::from_err)
     }
 
     /// Set the configuration for GCP connections. This is the preferred API from rust.
@@ -178,7 +182,7 @@ impl CloudOptions {
         let options = self
             .gcp
             .as_ref()
-            .ok_or_else(|| polars_err!("`gcp` configuration missing"))?;
+            .ok_or_else(|| err_missing_configuration("gcp", ""))?;
 
         let mut builder = GoogleCloudStorageBuilder::new();
         for (key, value) in options.iter() {
@@ -233,6 +237,76 @@ impl CloudOptions {
             }
         }
     }
+}
+
+#[allow(dead_code)]
+fn err_missing_feature<T>(feature: &str, scheme: &str) -> Result<T, ObstinateError> {
+    Err(ObstinateError::new(format!(
+        "feature '{}' must be enabled in order to use '{}' cloud urls",
+        feature, scheme
+    ))
+    .into())
+}
+#[cfg(feature = "async")]
+fn err_missing_configuration<T>(feature: &str, scheme: &str) -> Result<T, ObstinateError> {
+    Err(ObstinateError::new(format!(
+        "configuration '{}' must be provided in order to use '{}' cloud urls",
+        feature, scheme,
+    ))
+    .into())
+}
+
+/// Build an ObjectStore based on the URL and passed in url. Return the cloud location and an implementation of the object store.
+pub fn build(
+    url: &str,
+    _options: Option<&CloudOptions>,
+) -> Result<(CloudLocation, Box<dyn ObjectStore>), ObstinateError> {
+    let cloud_location = CloudLocation::new(url)?;
+    let store = match CloudType::from_str(url)? {
+        CloudType::File => {
+            let local = LocalFileSystem::new();
+            Ok::<_, ObstinateError>(Box::new(local) as Box<dyn ObjectStore>)
+        }
+        CloudType::Aws => {
+            #[cfg(feature = "aws")]
+            match _options {
+                Some(options) => {
+                    let store = options.build_aws(&cloud_location.bucket)?;
+                    Ok::<_, ObstinateError>(Box::new(store) as Box<dyn ObjectStore>)
+                }
+                _ => return err_missing_configuration("aws", &cloud_location.scheme),
+            }
+            #[cfg(not(feature = "aws"))]
+            return err_missing_feature("aws", &cloud_location.scheme);
+        }
+        CloudType::Gcp => {
+            #[cfg(feature = "gcp")]
+            match _options {
+                Some(options) => {
+                    let store = options.build_gcp(&cloud_location.bucket)?;
+                    Ok::<_, ObstinateError>(Box::new(store) as Box<dyn ObjectStore>)
+                }
+                _ => return err_missing_configuration("gcp", &cloud_location.scheme),
+            }
+            #[cfg(not(feature = "gcp"))]
+            return err_missing_feature("gcp", &cloud_location.scheme);
+        }
+        CloudType::Azure => {
+            {
+                #[cfg(feature = "azure")]
+                match _options {
+                    Some(options) => {
+                        let store = options.build_azure(&cloud_location.bucket)?;
+                        Ok::<_, ObstinateError>(Box::new(store) as Box<dyn ObjectStore>)
+                    }
+                    _ => return err_missing_configuration("azure", &cloud_location.scheme),
+                }
+            }
+            #[cfg(not(feature = "azure"))]
+            return err_missing_feature("azure", &cloud_location.scheme);
+        }
+    }?;
+    Ok((cloud_location, store))
 }
 
 use std::sync::OnceLock;
