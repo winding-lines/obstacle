@@ -35,7 +35,7 @@ fn extract_prefix_expansion(url: &str) -> Result<(String, Option<String>), Obsta
             expansion.push_str(".*");
             continue;
         }
-        if !split.contains("**") {
+        if split.contains("**") {
             return obstinate_err(format!(
                 "expected '**' by itself in path component, got {}",
                 url
@@ -197,6 +197,7 @@ mod test {
                 expansion: None,
             }
         );
+
         assert_eq!(
             CloudLocation::new("s3://a/b/*.c").unwrap(),
             CloudLocation {

@@ -9,11 +9,11 @@ use crate::{build, get_cloud_options};
 use futures_util::StreamExt;
 use home::home_dir;
 use object_store::path::Path as ObjectStorePath;
-use object_store::{local, GetOptions, ObjectStore};
+use object_store::{GetOptions, ObjectStore};
 use std::fs::{create_dir_all, File};
 use std::io::Write;
 use std::path::{self, PathBuf};
-use tokio::fs::{read_dir, remove_file, rename, DirEntry};
+use tokio::fs::{read_dir, remove_file};
 use url::Url;
 use uuid::Uuid;
 
@@ -31,16 +31,23 @@ fn _local_path_for_cloud_location(location: &CloudLocation) -> Result<PathBuf, O
 
 /// Delete any other content_* files that do not match the active content.
 async fn _cleanup_content(local_path: &PathBuf, active_content: &str) -> Result<(), ObstacleError> {
-    let mut latest: Option<DirEntry> = None;
-    for entry in read_dir(&local_path).await?.next_entry().await? {
-        let file_name = entry.file_name().to_string_lossy();
-        if file_name == active_content {
-            continue;
+    let mut dir = read_dir(&local_path).await?;
+    loop {
+        let entry = dir.next_entry().await?;
+        match entry {
+            None => break,
+            Some(entry) => {
+                let file_name = entry.file_name();
+                let file_name_str = file_name.to_string_lossy();
+                if file_name_str == active_content {
+                    continue;
+                }
+                if !file_name_str.starts_with("content_") {
+                    continue;
+                }
+                remove_file(entry.path()).await?;
+            }
         }
-        if !file_name.starts_with("content_") {
-            continue;
-        }
-        remove_file(entry.path()).await?;
     }
     Ok(())
 }
@@ -60,14 +67,14 @@ async fn _download_one(
     cloud_location: &CloudLocation,
     object_store: &Box<dyn ObjectStore>,
 ) -> Result<DownloadResult, ObstacleError> {
-    let os_path: ObjectStorePath = ObjectStorePath::from(cloud_location.prefix);
+    let os_path: ObjectStorePath = ObjectStorePath::from(cloud_location.prefix.clone());
 
     // Get the active e-tag for the object in the cloud, this cannot be read as part of the `get*` call.
     // https://github.com/apache/arrow-rs/discussions/4495
     let cloud_metadata = object_store.head(&os_path).await?;
     let desired_filename = format!(
         "content_{}",
-        cloud_metadata.e_tag.unwrap_or("default".into())
+        cloud_metadata.e_tag.clone().unwrap_or("default".into())
     );
 
     // check if we have a local copy of the file and return it if we do.
@@ -79,7 +86,7 @@ async fn _download_one(
 
     // Delete any old content_* files and download the latest version.
     _cleanup_content(&local_base, &desired_filename).await?;
-    let mut get_options = GetOptions {
+    let get_options = GetOptions {
         if_match: cloud_metadata.e_tag,
         ..GetOptions::default()
     };
@@ -98,10 +105,10 @@ async fn _download_one(
             _ => return Err(ObstacleError::new(err.to_string())),
         },
         Ok(result) => {
-            let stream = result.into_stream();
+            let mut stream = result.into_stream();
             let tempfile = local_base.join(path::Path::new(&format!(
                 "temp_{}",
-                Uuid::new_v7().to_string()
+                Uuid::new_v4().to_string()
             )));
             let mut local_file = File::create(&tempfile)?;
             while let Some(buffer) = stream.next().await {

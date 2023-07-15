@@ -1,10 +1,11 @@
 #[cfg(feature = "async")]
 use crate::cache::download_file;
 use crate::cloud::CloudType;
+use crate::err::ObstacleError;
 use memmap2::{self, MmapAsRawDesc, MmapOptions};
 use std::fmt::Debug;
 use std::fs::File;
-use std::io::Result;
+use std::io;
 use std::ops::Deref;
 use std::str::FromStr;
 use tokio;
@@ -14,19 +15,21 @@ pub struct Mmap(memmap2::Mmap);
 
 impl Mmap {
     /// Create a memory map from an object with the MmapAsRawDesc trait.
-    pub unsafe fn map<T: MmapAsRawDesc + Debug>(file: T) -> Result<Mmap> {
+    pub unsafe fn map<T: MmapAsRawDesc + Debug>(file: T) -> Result<Mmap, io::Error> {
         Ok(Mmap(MmapOptions::new().map(file)?))
     }
 
     /// Create a memory map from a file or url path.
     #[tokio::main]
-    pub async fn from_url(url: &str) -> Result<Mmap> {
+    pub async fn from_url(url: &str) -> Result<Option<Mmap>, ObstacleError> {
         match CloudType::from_str(url) {
             Ok(_cloud_type) => {
                 #[cfg(feature = "async")]
                 {
-                    let file = download_file(url).await.unwrap();
-                    unsafe { Mmap::map(&file) }
+                    download_file(url)
+                        .await?
+                        .map(|file| unsafe { Mmap::map(&file) }.map_err(ObstacleError::from_err))
+                        .transpose()
                 }
                 #[cfg(not(feature = "async"))]
                 {
@@ -34,8 +37,9 @@ impl Mmap {
                 }
             }
             Err(_) => {
+                // Check to see if the file exists locally.
                 let file = File::open(url)?;
-                unsafe { Mmap::map(&file) }
+                Some(unsafe { Mmap::map(&file) }.map_err(ObstacleError::from_err)).transpose()
             }
         }
     }
