@@ -9,8 +9,10 @@
 //! Run with:
 //!     cargo run --example   minio --features aws
 
+use obstacle::ObstacleError;
+
 #[cfg(feature = "aws")]
-fn mmap_from_url() {
+fn mmap_from_url() -> Result<(), ObstacleError> {
     use awscreds::Credentials;
     use object_store::ClientConfigKey;
     use obstacle::set_cloud_options;
@@ -28,14 +30,15 @@ fn mmap_from_url() {
         (Key::Endpoint, &"http://localhost:9000".into()),
     ]);
     set_cloud_options(cloud_options);
-    let mmaped = obstacle::Mmap::from_url(&"s3://one/foods2.csv").unwrap();
+    let mmaped = obstacle::Mmap::from_url(&"s3://one/foods2.csv")?.unwrap();
     print!("content: {}.", from_utf8(&mmaped[..]).unwrap());
+    Ok(())
 }
 
-pub fn main() {
+pub fn main() -> Result<(), ObstacleError> {
     #[cfg(feature = "aws")]
     {
-        mmap_from_url();
+        mmap_from_url()
     }
     #[cfg(not(feature = "aws"))]
     {

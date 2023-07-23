@@ -2,8 +2,10 @@
 mod cache;
 mod cloud;
 mod err;
-mod mmap;
 mod glob;
+mod mmap;
 
 pub use cloud::*;
+pub use err::ObstacleError;
 pub use mmap::*;
+pub use object_store::ClientConfigKey;

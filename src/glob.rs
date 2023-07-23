@@ -113,6 +113,10 @@ impl CloudLocation {
             expansion,
         })
     }
+
+    pub fn as_url(&self) -> String {
+        format!("{}://{}/{}", self.scheme, self.bucket, self.prefix)
+    }
 }
 
 /// Return a full url from a key relative to the given location.
